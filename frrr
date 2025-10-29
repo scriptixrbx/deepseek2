@@ -1,36 +1,317 @@
--- SUPER SIMPLE MM2 Trade for Phone
-local player = game.Players.LocalPlayer
+-- MM2 Auto Trade Script v5 - Enhanced Remote Fallback + Generic Search (Oct 2025)
+-- By Grok (educational only - high ban risk!)
+-- Требует syn.request, mouse1click/firesignal
 
--- Просто кнопка
-local gui = Instance.new("ScreenGui")
-gui.Parent = player.PlayerGui
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage -- Common folder
 
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(0, 100, 0, 50)
-btn.Position = UDim2.new(0, 10, 0, 10)
-btn.Text = "START TRADE"
-btn.BackgroundColor3 = Color3.new(0, 1, 0)
-btn.Parent = gui
+-- Настройки
+local AUTO_TRADE_ENABLED = false
+local AUTO_ADD_ENABLED = false
+local AUTO_ADD_ITEM = "Fire Tiger" -- Твой godly
+local MONITOR_INTERVAL = 30
+local TRADE_CHECK_INTERVAL = 3
+local PRICE_CHANGE_THRESHOLD = 0.05
+local WIN_THRESHOLD = 1.1
+local itemsToMonitor = {"Fire Tiger", "Brush Knife", "Fang Blade"}
+local priceHistory = {}
+local itemValues = {}
+local lastCacheUpdate = 0
+local CACHE_DURATION = 300 -- 5 мин
 
-btn.MouseButton1Click:Connect(function()
-    -- Когда нажимаешь кнопку - добавляет предметы и принимает трейд
-    local backpack = player.Backpack
-    if backpack then
-        for _, item in pairs(backpack:GetChildren()) do
-            if item:IsA("Tool") then
-                -- Пробуем добавить предмет
-                pcall(function()
-                    game.ReplicatedStorage:FindFirstChild("AddItemToTrade"):FireServer(item)
-                end)
+-- Fetch цен (улучшенный, с fallback)
+local function fetchItemValue(itemName)
+    local now = tick()
+    local cleanName = itemName:lower():gsub("%s+", " "):gsub("[^%w%s]", "")
+    if itemValues[cleanName] and (now - lastCacheUpdate) < CACHE_DURATION then
+        return itemValues[cleanName]
+    end
+    
+    local success, response = pcall(function()
+        -- mm2values parse
+        local url = "https://www.mm2values.com/?p=godly"
+        local res = syn.request({Url = url, Method = "GET"})
+        if res.StatusCode == 200 then
+            local html = res.Body
+            for name, value in html:gmatch('<tr[^>]*>.-<td[^>]*>([^<]+)</td>.-<td[^>]*class="value"[^>]*>([%d,]+)</td>') do -- Улучшен regex with ,
+                local clean = name:lower():gsub("%s+", " "):gsub("[^%w%s]", "")
+                itemValues[clean] = tonumber(value:gsub(",", "")) or 0
+            end
+            lastCacheUpdate = now
+            return itemValues[cleanName] or 0
+        end
+        
+        -- Fallback supreme
+        local supUrl = "https://api.supremevalues.xyz/items?search=" .. HttpService:UrlEncode(itemName)
+        local supRes = syn.request({Url = supUrl, Method = "GET"})
+        if supRes.StatusCode == 200 then
+            local data = HttpService:JSONDecode(supRes.Body)
+            return data[1] and data[1].value or 0
+        end
+        return 0
+    end)
+    if not success then warn("Fetch error: " .. response) return 0 end
+    return response
+end
+
+-- Тренд
+local function analyzeTrend(itemName)
+    local currentPrice = fetchItemValue(itemName)
+    local cleanName = itemName:lower():gsub("%s+", " "):gsub("[^%w%s]", "")
+    if not priceHistory[cleanName] then
+        priceHistory[cleanName] = {prices = {currentPrice}}
+        return "stable"
+    end
+    local prices = priceHistory[cleanName].prices
+    table.insert(prices, 1, currentPrice)
+    if #prices > 10 then table.remove(prices) end
+    
+    local oldPrice = prices[#prices]
+    if oldPrice == 0 then return "stable" end
+    local change = (currentPrice - oldPrice) / oldPrice
+    
+    if change > PRICE_CHANGE_THRESHOLD then return "rising"
+    elseif change < -PRICE_CHANGE_THRESHOLD then return "falling"
+    else return "stable" end
+end
+
+-- Чат
+local function chatMessage(msg)
+    pcall(function()
+        ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+    end)
+end
+
+-- Find by text/class
+local function findChildByText(parent, text, class)
+    for _, child in pairs(parent:GetDescendants()) do
+        if child:IsA(class or "TextButton") and (child.Text:lower():match(text:lower()) or child.Name:lower():match(text:lower())) then
+            return child
+        end
+    end
+    return nil
+end
+
+-- Value стороны
+local function calculateTradeValue(scrollingFrame)
+    if not scrollingFrame then return 0 end
+    local total = 0
+    for _, child in pairs(scrollingFrame:GetDescendants()) do
+        if child:IsA("TextLabel") and child.Text ~= "" then
+            total += fetchItemValue(child.Text)
+        end
+    end
+    return total
+end
+
+-- Авто-трейд
+local function autoTradeCheck()
+    if not AUTO_TRADE_ENABLED then return end
+    
+    local tradeGui = nil
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui.Name:match("Trade") and gui.Visible then
+            tradeGui = gui
+            break
+        end
+    end
+    if not tradeGui then print("No visible trade GUI") return end
+    print("Trade GUI: " .. tradeGui.Name)
+    
+    for _, item in ipairs(itemsToMonitor) do
+        local trend = analyzeTrend(item)
+        chatMessage(trend == "rising" and "add " .. item or "no " .. item)
+    end
+    
+    local myScrolling = findChildByText(tradeGui, "my", "ScrollingFrame") or findChildByText(tradeGui, "left", "ScrollingFrame") or findChildByText(tradeGui, "offer", "ScrollingFrame")
+    local otherScrolling = findChildByText(tradeGui, "other", "ScrollingFrame") or findChildByText(tradeGui, "right", "ScrollingFrame") or findChildByText(tradeGui, "offer", "ScrollingFrame", 2) -- Second one
+    local myValue = calculateTradeValue(myScrolling)
+    local otherValue = calculateTradeValue(otherScrolling)
+    print("My: " .. myValue .. " Other: " .. otherValue)
+    chatMessage("Values: My=" .. myValue .. " Other=" .. otherValue)
+    
+    local isWin = myValue > otherValue * WIN_THRESHOLD
+    
+    local acceptBtn = findChildByText(tradeGui, "accept", "TextButton") or findChildByText(tradeGui, "confirm", "TextButton")
+    local declineBtn = findChildByText(tradeGui, "decline", "TextButton") or findChildByText(tradeGui, "cancel", "TextButton")
+    
+    if isWin then
+        if acceptBtn then
+            pcall(function() mouse1click(acceptBtn.AbsolutePosition.X, acceptBtn.AbsolutePosition.Y) end)
+            pcall(function() firesignal(acceptBtn.Activated) end)
+        end
+        -- Remote fallback
+        local acceptRemote = remotes:FindFirstChild("AcceptTrade") or remotes:FindFirstChild("TradeAccept") or remotes:FindFirstChild("TradeRemote")
+        if acceptRemote then acceptRemote:FireServer(true) end
+        chatMessage("add WIN! Accepted.")
+        print("Accept fired")
+    else
+        if declineBtn then
+            pcall(function() mouse1click(declineBtn.AbsolutePosition.X, declineBtn.AbsolutePosition.Y) end)
+            pcall(function() firesignal(declineBtn.Activated) end)
+        end
+        local declineRemote = remotes:FindFirstChild("DeclineTrade") or remotes:FindFirstChild("TradeDecline") or remotes:FindFirstChild("TradeRemote")
+        if declineRemote then declineRemote:FireServer(false) end
+        chatMessage("no LOSE! Declined.")
+        print("Decline fired")
+    end
+end
+
+-- Авто-add
+local function autoAddItemToTrade()
+    if not AUTO_ADD_ENABLED or not AUTO_TRADE_ENABLED then return end
+    local tradeGui = nil
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui.Name:match("Trade") and gui.Visible then
+            tradeGui = gui
+            break
+        end
+    end
+    if not tradeGui then return end
+    
+    local trend = analyzeTrend(AUTO_ADD_ITEM)
+    if trend ~= "rising" then return end
+    
+    local inventoryScrolling = findChildByText(tradeGui, "inventory", "ScrollingFrame") or findChildByText(tradeGui, "my", "ScrollingFrame")
+    if inventoryScrolling then
+        for _, slot in pairs(inventoryScrolling:GetDescendants()) do
+            if slot:IsA("TextButton") and slot.Text:match(AUTO_ADD_ITEM) or slot.Name:match(AUTO_ADD_ITEM) then
+                pcall(function() firesignal(slot.Activated) end)
+                chatMessage("add " .. AUTO_ADD_ITEM .. "!")
+                print("Added " .. AUTO_ADD_ITEM)
+                return
             end
         end
     end
     
-    -- Пробуем принять трейд
-    wait(1)
-    pcall(function()
-        game.ReplicatedStorage:FindFirstChild("AcceptTrade"):FireServer()
-    end)
+    -- Remote fallback
+    local backpack = player.Backpack
+    local item = backpack:FindFirstChild(AUTO_ADD_ITEM) or player.Character:FindFirstChild(AUTO_ADD_ITEM)
+    if item then
+        local addRemote = remotes:FindFirstChild("AddItemToTrade") or remotes:FindFirstChild("TradeAdd") or remotes:FindFirstChild("TradeRemote")
+        if addRemote then addRemote:FireServer(item) end
+        chatMessage("add from inventory!")
+        print("Remote add fired")
+    end
+end
+
+-- Loops
+spawn(function()
+    while true do
+        wait(TRADE_CHECK_INTERVAL)
+        autoTradeCheck()
+        autoAddItemToTrade()
+    end
 end)
 
-print("Просто нажми кнопку когда в трейде!")
+spawn(function()
+    while true do
+        wait(MONITOR_INTERVAL)
+        for _, item in ipairs(itemsToMonitor) do
+            analyzeTrend(item)
+        end
+        print("Cache updated")
+    end
+end)
+
+-- GUI
+local function createGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AutoTradeGUI"
+    screenGui.Parent = playerGui
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 250, 0, 250)
+    frame.Position = UDim2.new(0, 10, 0, 10)
+    frame.BackgroundColor3 = Color3.new(0, 0, 0)
+    frame.Parent = screenGui
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Text = "MM2 Auto Trade v5 (2025 Fix)"
+    title.BackgroundTransparency = 1
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.Parent = frame
+    
+    local toggleTrade = Instance.new("TextButton")
+    toggleTrade.Size = UDim2.new(1, 0, 0, 30)
+    toggleTrade.Position = UDim2.new(0, 0, 0, 30)
+    toggleTrade.Text = "Auto Trade: OFF"
+    toggleTrade.BackgroundColor3 = Color3.new(1, 0, 0)
+    toggleTrade.Parent = frame
+    toggleTrade.MouseButton1Click:Connect(function()
+        AUTO_TRADE_ENABLED = not AUTO_TRADE_ENABLED
+        toggleTrade.Text = "Auto Trade: " .. (AUTO_TRADE_ENABLED and "ON" or "OFF")
+        toggleTrade.BackgroundColor3 = AUTO_TRADE_ENABLED and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
+    end)
+    
+    local toggleAdd = Instance.new("TextButton")
+    toggleAdd.Size = UDim2.new(1, 0, 0, 30)
+    toggleAdd.Position = UDim2.new(0, 0, 0, 60)
+    toggleAdd.Text = "Auto Add (" .. AUTO_ADD_ITEM .. "): OFF"
+    toggleAdd.BackgroundColor3 = Color3.new(1, 0, 0)
+    toggleAdd.Parent = frame
+    toggleAdd.MouseButton1Click:Connect(function()
+        AUTO_ADD_ENABLED = not AUTO_ADD_ENABLED
+        toggleAdd.Text = "Auto Add (" .. AUTO_ADD_ITEM .. "): " .. (AUTO_ADD_ENABLED and "ON" or "OFF")
+        toggleAdd.BackgroundColor3 = AUTO_ADD_ENABLED and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
+    end)
+    
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1, 0, 0, 30)
+    status.Position = UDim2.new(0, 0, 0, 90)
+    status.Text = "Статус: Готов | Cached: 0"
+    status.BackgroundTransparency = 1
+    status.TextColor3 = Color3.new(1, 1, 1)
+    status.Parent = frame
+    
+    local debugBtn = Instance.new("TextButton")
+    debugBtn.Size = UDim2.new(1, 0, 0, 30)
+    debugBtn.Position = UDim2.new(0, 0, 0, 120)
+    debugBtn.Text = "Debug Trade & Remotes"
+    debugBtn.BackgroundColor3 = Color3.new(0.5, 0, 0)
+    debugBtn.Parent = frame
+    debugBtn.MouseButton1Click:Connect(function()
+        local tradeGui = nil
+        for _, gui in pairs(playerGui:GetChildren()) do
+            if gui.Name:match("Trade") and gui.Visible then
+                tradeGui = gui
+                break
+            end
+        end
+        print("=== DEBUG v5: PlayerGui ===")
+        for _, v in pairs(playerGui:GetChildren()) do print("- " .. v.Name .. " (Visible: " .. tostring(v.Visible) .. ")") end
+        if tradeGui then
+            print("=== TradeGui Children ===")
+            for _, v in pairs(tradeGui:GetChildren()) do print("  - " .. v.Name) end
+            print("=== Trade Descendants (Buttons/Frames/Labels) ===")
+            for _, v in pairs(tradeGui:GetDescendants()) do 
+                if v:IsA("TextButton") or v:IsA("Frame") or v:IsA("ScrollingFrame") or v:IsA("TextLabel") then
+                    print("    - " .. v.Name .. " (Text: " .. (v.Text or "") .. ") Class: " .. v.ClassName)
+                end 
+            end
+        else
+            print("No TradeGui!")
+        end
+        print("=== Remotes in ReplicatedStorage ===")
+        for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then print("- Remote: " .. v.Name .. " in " .. v.Parent.Name) end
+        end
+        print("=== End Debug ===")
+    end)
+    
+    -- Status
+    spawn(function()
+        while true do
+            wait(5)
+            status.Text = "Cached: " .. table.getn(itemValues) .. " | Trade: " .. (AUTO_TRADE_ENABLED and "ON" or "OFF")
+        end
+    end)
+end
+
+createGUI()
+print("v5 loaded! Enable, open trade, press Debug & send F9 output if issues.")

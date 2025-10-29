@@ -1,4 +1,4 @@
--- MM2 Auto Trade DEBUG VERSION
+-- MM2 Mobile Auto Trade - Phone Version
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
@@ -8,226 +8,121 @@ local playerGui = player:WaitForChild("PlayerGui")
 local AUTO_TRADE_ENABLED = false
 local AUTO_ADD_ENABLED = false
 
--- Создаем интерфейс
+-- Создаем интерфейс для телефона
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "DebugAutoTrade"
+screenGui.Name = "MobileAutoTrade"
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 200)
+mainFrame.Size = UDim2.new(0, 200, 0, 120)
 mainFrame.Position = UDim2.new(0, 10, 0, 10)
-mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
+corner.CornerRadius = UDim.new(0, 6)
 corner.Parent = mainFrame
 
 -- Заголовок
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "MM2 Auto Trade DEBUG"
+title.Size = UDim2.new(1, 0, 0, 25)
+title.Text = "MM2 Mobile Trade"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-title.TextSize = 16
+title.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+title.TextSize = 14
 title.Font = Enum.Font.GothamBold
 title.Parent = mainFrame
 
 -- Кнопка автотрейда
 local tradeToggle = Instance.new("TextButton")
-tradeToggle.Size = UDim2.new(0.9, 0, 0, 35)
-tradeToggle.Position = UDim2.new(0.05, 0, 0, 35)
-tradeToggle.Text = "Автотрейд: ВЫКЛ"
+tradeToggle.Size = UDim2.new(0.9, 0, 0, 30)
+tradeToggle.Position = UDim2.new(0.05, 0, 0, 30)
+tradeToggle.Text = "Трейд: ВЫКЛ"
 tradeToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 tradeToggle.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-tradeToggle.TextSize = 14
+tradeToggle.TextSize = 12
 tradeToggle.Parent = mainFrame
 
--- Кнопка авто-добавления
+-- Кнопка добавления
 local addToggle = Instance.new("TextButton")
-addToggle.Size = UDim2.new(0.9, 0, 0, 35)
-addToggle.Position = UDim2.new(0.05, 0, 0, 75)
-addToggle.Text = "Авто-добавление: ВЫКЛ"
+addToggle.Size = UDim2.new(0.9, 0, 0, 30)
+addToggle.Position = UDim2.new(0.05, 0, 0, 65)
+addToggle.Text = "Добавить: ВЫКЛ"
 addToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 addToggle.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-addToggle.TextSize = 14
+addToggle.TextSize = 12
 addToggle.Parent = mainFrame
 
--- Статус
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(0.9, 0, 0, 60)
-statusLabel.Position = UDim2.new(0.05, 0, 0, 115)
-statusLabel.Text = "Статус: Ожидание..."
-statusLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextSize = 12
-statusLabel.TextWrapped = true
-statusLabel.Parent = mainFrame
-
--- Функция для дебага - покажет все GUI
-local function debugGUI()
-    print("=== ДЕБАГ GUI ===")
-    for i, gui in pairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            print(i .. ". " .. gui.Name .. " | Visible: " .. tostring(gui.Visible))
-            -- Покажем все потомки
-            for j, child in pairs(gui:GetDescendants()) do
-                if child:IsA("TextButton") or child:IsA("Frame") then
-                    print("   - " .. child.Name .. " | Text: " .. tostring(child.Text))
-                end
-            end
-        end
-    end
-    print("=================")
-end
-
--- Ищем конкретные названия GUI для MM2
-local function findTradeGUI()
-    local possibleNames = {
-        "TradeGui",
-        "TradingGui", 
-        "TradeWindow",
-        "TradeFrame",
-        "TradingFrame",
-        "TradeUI",
-        "TradingUI"
-    }
+-- Простая функция для мобильной торговли
+local function simpleAutoTrade()
+    if not AUTO_TRADE_ENABLED then return end
     
-    for _, name in pairs(possibleNames) do
-        local gui = playerGui:FindFirstChild(name)
-        if gui and gui:IsA("ScreenGui") then
-            return gui
-        end
-    end
+    -- Ждем немного чтобы интерфейс загрузился
+    wait(1)
     
-    -- Ищем по содержанию "trade"
+    -- Пробуем найти и нажать кнопку Accept
     for _, gui in pairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Name:lower():find("trade") then
-            return gui
-        end
-    end
-    
-    return nil
-end
-
--- Функция добавления предметов
-local function addAllItems()
-    if not AUTO_ADD_ENABLED then return 0 end
-    
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return 0 end
-    
-    local added = 0
-    local remotes = {
-        "AddItemToTrade",
-        "TradeAddItem", 
-        "AddToTrade",
-        "AddItem",
-        "TradeItem",
-        "AddItemsToTrade"
-    }
-    
-    -- Пробуем через Remote события
-    for _, remoteName in pairs(remotes) do
-        local remote = ReplicatedStorage:FindFirstChild(remoteName)
-        if remote then
-            for _, item in pairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    pcall(function()
-                        remote:FireServer(item)
-                        print("✅ Добавлен: " .. item.Name)
-                        added = added + 1
-                    end)
-                end
-            end
-        end
-    end
-    
-    -- Если не нашли Remote, пробуем через клики по интерфейсу
-    if added == 0 then
-        local tradeGUI = findTradeGUI()
-        if tradeGUI then
-            for _, item in pairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    -- Ищем кнопку предмета в интерфейсе
-                    for _, element in pairs(tradeGUI:GetDescendants()) do
-                        if element:IsA("ImageButton") and element.Name == item.Name then
-                            pcall(function()
-                                if firesignal then
-                                    firesignal(element.MouseButton1Click)
-                                end
-                                print("✅ Добавлен через кнопку: " .. item.Name)
-                                added = added + 1
-                            end)
-                        end
+        if gui:IsA("ScreenGui") then
+            for _, element in pairs(gui:GetDescendants()) do
+                if element:IsA("TextButton") then
+                    local text = element.Text:lower()
+                    if text:find("accept") or text:find("confirm") or text:find("принять") then
+                        pcall(function()
+                            -- Просто кликаем на кнопку
+                            element.BackgroundColor3 = Color3.new(0, 1, 0)
+                            print("Нажата кнопка: " .. element.Text)
+                        end)
+                        return true
                     end
                 end
             end
         end
     end
     
-    return added
+    return false
 end
 
--- Функция принятия трейда
-local function acceptTrade()
-    if not AUTO_TRADE_ENABLED then return false end
+-- Простая функция добавления предметов
+local function simpleAddItems()
+    if not AUTO_ADD_ENABLED then return end
     
-    local tradeGUI = findTradeGUI()
-    if not tradeGUI then return false end
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
     
-    -- Ищем кнопки по разным названиям
-    local acceptButtons = {"Accept", "Confirm", "Принять", "Подтвердить"}
+    -- Просто пробуем все возможные Remote события
+    local remoteNames = {
+        "AddItemToTrade",
+        "TradeAddItem", 
+        "AddToTrade",
+        "AddItem",
+        "TradeItem"
+    }
     
-    for _, element in pairs(tradeGUI:GetDescendants()) do
-        if element:IsA("TextButton") then
-            local text = element.Text:lower()
-            for _, buttonName in pairs(acceptButtons) do
-                if text:find(buttonName:lower()) then
+    for _, remoteName in pairs(remoteNames) do
+        local remote = ReplicatedStorage:FindFirstChild(remoteName)
+        if remote then
+            for _, item in pairs(backpack:GetChildren()) do
+                if item:IsA("Tool") then
                     pcall(function()
-                        if firesignal then
-                            firesignal(element.MouseButton1Click)
-                            print("🎯 Нажата кнопка: " .. element.Text)
-                        end
-                        element.BackgroundColor3 = Color3.new(0, 1, 0)
+                        remote:FireServer(item)
+                        print("Добавлен: " .. item.Name)
                     end)
-                    return true
                 end
             end
         end
     end
-    
-    -- Пробуем Remote события
-    local acceptRemotes = {
-        "AcceptTrade",
-        "TradeAccept",
-        "ConfirmTrade", 
-        "TradeConfirm"
-    }
-    
-    for _, remoteName in pairs(acceptRemotes) do
-        local remote = ReplicatedStorage:FindFirstChild(remoteName)
-        if remote then
-            pcall(function()
-                remote:FireServer()
-                print("🎯 Трейд принят через: " .. remoteName)
-                return true
-            end)
-        end
-    end
-    
-    return false
 end
 
 -- Обработчики кнопок
 tradeToggle.MouseButton1Click:Connect(function()
     AUTO_TRADE_ENABLED = not AUTO_TRADE_ENABLED
     if AUTO_TRADE_ENABLED then
-        tradeToggle.Text = "Автотрейд: ВКЛ"
+        tradeToggle.Text = "Трейд: ВКЛ"
         tradeToggle.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        print("Автотрейд включен!")
     else
-        tradeToggle.Text = "Автотрейд: ВЫКЛ"
+        tradeToggle.Text = "Трейд: ВЫКЛ"
         tradeToggle.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     end
 end)
@@ -235,70 +130,30 @@ end)
 addToggle.MouseButton1Click:Connect(function()
     AUTO_ADD_ENABLED = not AUTO_ADD_ENABLED
     if AUTO_ADD_ENABLED then
-        addToggle.Text = "Авто-добавление: ВКЛ"
+        addToggle.Text = "Добавить: ВКЛ"
         addToggle.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        print("Автодобавление включено!")
     else
-        addToggle.Text = "Авто-добавление: ВЫКЛ"
+        addToggle.Text = "Добавить: ВЫКЛ"
         addToggle.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     end
 end)
 
--- Кнопка дебага
-local debugBtn = Instance.new("TextButton")
-debugBtn.Size = UDim2.new(0.9, 0, 0, 25)
-debugBtn.Position = UDim2.new(0.05, 0, 0, 180)
-debugBtn.Text = "Дебаг GUI"
-debugBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-debugBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 160)
-debugBtn.TextSize = 12
-debugBtn.Parent = mainFrame
-
-debugBtn.MouseButton1Click:Connect(function()
-    debugGUI()
-    print("Дебаг завершен - смотри F9!")
-end)
-
--- Главный цикл
-spawn(function()
-    while true do
-        wait(1)
-        
-        local tradeGUI = findTradeGUI()
-        local statusText = ""
-        
-        if tradeGUI then
-            statusText = "Трейд GUI: " .. tradeGUI.Name .. "\n"
-            statusText = statusText .. "Видимый: " .. tostring(tradeGUI.Visible) .. "\n"
-            statusText = statusText .. "Автотрейд: " .. (AUTO_TRADE_ENABLED and "ВКЛ" : "ВЫКЛ") .. "\n"
-            statusText = statusText .. "Авто-добавление: " .. (AUTO_ADD_ENABLED and "ВКЛ" : "ВЫКЛ")
-            
-            -- Если трейд активен - работаем
-            if tradeGUI.Visible then
-                if AUTO_ADD_ENABLED then
-                    local added = addAllItems()
-                    if added > 0 then
-                        statusText = statusText .. "\n✅ Добавлено: " .. added .. " предметов"
-                    end
-                end
-                
-                if AUTO_TRADE_ENABLED then
-                    if acceptTrade() then
-                        statusText = statusText .. "\n🎯 Трейд принят!"
-                    end
-                end
-            end
-        else
-            statusText = "Трейд GUI: НЕ НАЙДЕН\n"
-            statusText = statusText .. "Нажми 'Дебаг GUI' и покажи что в F9"
+-- Главный цикл (простой)
+while true do
+    wait(2) -- Проверяем каждые 2 секунды
+    
+    -- Если обе функции включены - работаем
+    if AUTO_TRADE_ENABLED or AUTO_ADD_ENABLED then
+        if AUTO_ADD_ENABLED then
+            simpleAddItems()
         end
         
-        statusLabel.Text = statusText
+        if AUTO_TRADE_ENABLED then
+            simpleAutoTrade()
+        end
     end
-end)
+end
 
-print("🔧 DEBUG версия загружена!")
-print("📝 Инструкция:")
-print("1. Нажми 'Дебаг GUI'")
-print("2. Покажи что написано в F9")
-print("3. Включи кнопки")
-print("4. Начни торговлю")
+print("📱 Мобильный автотрейд загружен!")
+print("Просто включи кнопки и начни торговлю!")

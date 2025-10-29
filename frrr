@@ -1,63 +1,217 @@
--- MM2 Auto Accept Trade v7 - Mobile Friendly (Remote Only)
--- Use at own risk
+-- MM2 Auto Trade v8 - Mobile Remote Only + Embedded Values (Oct 2025)
+-- By Grok (use at risk, ban possible)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
+local backpack = player:FindFirstChildOfClass("Backpack")
 
-local AUTO_TRADE_ENABLED = false
+-- Настройки
+local AUTO_TRADE_ENABLED = true -- Включи true для auto
+local AUTO_ADD_ENABLED = true
+local AUTO_ADD_ITEM = "Fire Tiger" -- Твой предмет
+local TRADE_CHECK_INTERVAL = 5 -- Секунды
+local WIN_THRESHOLD = 1.1 -- Win если твоя value > их * 1.1
+local itemsToMonitor = {"Fire Tiger", "Brush Knife", "Fang Blade"}
 
--- Embedded values (from mm2values.com Oct 2025)
+-- Embedded values from mm2values.com (29.10.2025)
 local itemValues = {
-    -- (same as in v6, I cut for brevity, add from previous)
-    ["fire tiger"] = 285, -- Example, add more
-    -- ...
+    ["travelers gun"] = 4050,
+    ["evergun"] = 2850,
+    ["constellation"] = 1950,
+    ["turkey"] = 1450,
+    ["raygun"] = 1400,
+    ["evergreen"] = 1375,
+    ["vampires gun"] = 1100,
+    ["blossom"] = 950,
+    ["sakura"] = 940,
+    ["darkshot"] = 775,
+    ["darksword"] = 770,
+    ["bauble"] = 500,
+    ["alienbeam"] = 500,
+    ["bat"] = 285,
+    ["xenoknife"] = 285,
+    ["xenoshot"] = 285,
+    ["sunrise"] = 280,
+    ["soul"] = 270,
+    ["spirit"] = 265,
+    ["rainbow"] = 235,
+    ["rainbow gun"] = 235,
+    ["candy"] = 180,
+    ["bloom"] = 170,
+    ["flora"] = 165,
+    ["sunset"] = 165,
+    ["flowerwood gun"] = 150,
+    ["ocean"] = 150,
+    ["flowerwood knife"] = 145,
+    ["waves"] = 140,
+    ["heartblade"] = 120,
+    ["watergun"] = 120,
+    ["borealis"] = 110,
+    ["australis"] = 105,
+    ["sugar"] = 80,
+    ["luger"] = 70,
+    ["iceblaster"] = 68,
+    ["candleflame"] = 65,
+    ["pearl"] = 65,
+    ["pearlshine"] = 65,
+    ["makeshift"] = 65,
+    ["elderwood blade"] = 65,
+    ["red luger"] = 62,
+    ["elderwood revolver"] = 60,
+    ["phantom"] = 58,
+    ["spectre"] = 58,
+    ["darkbringer"] = 58,
+    ["swirlygun"] = 55,
+    ["lightbringer"] = 55,
+    ["green luger"] = 42,
+    ["swirlyblade"] = 40,
+    ["laser"] = 30,
+    ["iceflake"] = 28,
+    ["icebeam"] = 28,
+    ["plasmabeam"] = 28,
+    ["plasmablade"] = 28,
+    ["hallowgun"] = 28,
+    ["amerilaser"] = 27,
+    ["old glory"] = 26,
+    ["shark"] = 26,
+    ["night blade"] = 26,
+    ["blaster"] = 25,
+    ["pixel"] = 23,
+    ["ginger luger"] = 23,
+    ["virtual"] = 23,
+    ["cookiecane"] = 23,
+    ["gingermint"] = 23,
+    ["nebula"] = 22,
+    ["eternal cane"] = 22,
+    ["luger cane"] = 22,
+    ["gemstone"] = 22,
+    ["jinglegun"] = 21,
+    ["clockwork"] = 20,
+    ["slasher"] = 20,
+    ["gingerblade"] = 20,
+    ["battle axe ii"] = 18,
+    ["death shard"] = 18,
+    ["heat"] = 17,
+    ["battleaxe"] = 17,
+    ["minty"] = 17,
+    ["chill"] = 15,
+    ["spider"] = 15,
+    ["xmas"] = 15,
+    ["tides"] = 15,
+    ["fang"] = 15,
+    ["bioblade"] = 15,
+    ["vampires edge"] = 14,
+    ["hallows edge"] = 12,
+    ["pumpking"] = 12,
+    ["frostsaber"] = 12,
+    ["ice shard"] = 11,
+    ["eternal"] = 10,
+    ["flames"] = 10,
+    ["winters edge"] = 10,
+    ["hallows blade"] = 10,
+    ["handsaw"] = 9,
+    ["ice dragon"] = 9,
+    ["eternal iii"] = 9,
+    ["eternal iv"] = 9,
+    ["eternal ii"] = 8,
+    ["boneblade"] = 8,
+    ["saw"] = 8,
+    ["snowflake"] = 8,
+    ["ghost blade"] = 8,
+    ["frostbite"] = 7,
+    ["eggblade"] = 6,
+    ["prismatic"] = 6,
+    ["peppermint"] = 4,
+    ["cookieblade"] = 4,
+    ["red seer"] = 3,
+    ["blue seer"] = 3,
+    ["purple seer"] = 3,
+    ["seer"] = 3,
+    ["orange seer"] = 2,
+    ["yellow seer"] = 2
 }
 
+-- Fetch value
 local function fetchItemValue(itemName)
-    local clean = itemName:lower()
+    local clean = itemName:lower():gsub("%s+", " "):gsub("[^%w%s]", "")
     return itemValues[clean] or 0
 end
 
+-- Чат
 local function chatMessage(msg)
-    pcall(function()
-        ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
-    end)
+    ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
 end
 
-local function calculateTradeValue(side)
-    -- To do: adapt to mobile, perhaps fire remote to get trade data, but for now assume manual
-    -- Assume your side value > their
-    return 100 -- Pseu do, replace with real calculation if GUI accessible
+-- Расчёт value (упрощён: предполагаем твои предметы в Backpack, их - manual or fixed)
+local function calculateMyValue()
+    local total = 0
+    for _, tool in pairs(backpack:GetChildren()) do
+        total = total + fetchItemValue(tool.Name)
+    end
+    return total
 end
 
+local function calculateTheirValue()
+    -- Fixed placeholder (замени на реальный, если есть remote for trade data)
+    return 100 -- Пример, сделай меньше для win
+end
+
+-- Auto-trade
 local function autoTradeCheck()
     if not AUTO_TRADE_ENABLED then return end
-    -- Assume trade open, calculate
-    local myValue = calculateTradeValue("my")
-    local theirValue = calculateTradeValue("their")
-    local isWin = myValue > theirValue * 1.1
+    
+    print("Checking trade...")
+    
+    local myValue = calculateMyValue()
+    local theirValue = calculateTheirValue()
+    print("My value: " .. myValue .. " Their: " .. theirValue)
+    
+    local isWin = myValue > theirValue * WIN_THRESHOLD
+    
+    local acceptRemote = remotes:FindFirstChild("AcceptTrade") or remotes:FindFirstChild("TradeAccept") or remotes:FindFirstChild("TradeRemote") or remotes:FindFirstChild("Trade")
+    local declineRemote = remotes:FindFirstChild("DeclineTrade") or remotes:FindFirstChild("TradeDecline") or remotes:FindFirstChild("TradeRemote") or remotes:FindFirstChild("Trade")
+    
     if isWin then
-        pcall(function() remotes.AcceptTrade:FireServer(true) end)
-        pcall(function() remotes.TradeAccept:FireServer() end)
-        pcall(function() remotes.Trade:FireServer("accept") end)
-        chatMessage("add WIN!")
+        if acceptRemote then
+            acceptRemote:FireServer(true) or acceptRemote:FireServer("accept")
+            print("Accepted via remote")
+        end
+        chatMessage("add WIN! (my " .. myValue .. ")")
     else
-        pcall(function() remotes.DeclineTrade:FireServer() end)
-        pcall(function() remotes.TradeDecline:FireServer() end)
-        pcall(function() remotes.Trade:FireServer("decline") end)
-        chatMessage("no LOSE!")
+        if declineRemote then
+            declineRemote:FireServer(false) or declineRemote:FireServer("decline")
+            print("Declined via remote")
+        end
+        chatMessage("no LOSE! (their " .. theirValue .. ")")
     end
 end
 
--- Simple toggle (no GUI, use print)
+-- Auto-add
+local function autoAddItemToTrade()
+    if not AUTO_ADD_ENABLED then return end
+    
+    local item = backpack:FindFirstChild(AUTO_ADD_ITEM)
+    if item then
+        local addRemote = remotes:FindFirstChild("AddToTrade") or remotes:FindFirstChild("TradeAdd") or remotes:FindFirstChild("TradeRemote") or remotes:FindFirstChild("TradeUpdate")
+        if addRemote then
+            addRemote:FireServer(item) or addRemote:FireServer("add", item)
+            print("Added item via remote")
+        end
+        chatMessage("add " .. AUTO_ADD_ITEM)
+    else
+        print("No " .. AUTO_ADD_ITEM .. " in backpack")
+    end
+end
+
+-- Loop
 spawn(function()
     while true do
-        wait(3)
+        wait(TRADE_CHECK_INTERVAL)
         autoTradeCheck()
+        autoAddItemToTrade()
     end
 end)
 
-AUTO_TRADE_ENABLED = true -- Set to true to enable
-print("v7 loaded! Auto on. Open trade, it should accept if win.")
+print("v8 loaded! Auto: " .. tostring(AUTO_TRADE_ENABLED) .. ". Open trade, check console for prints.")

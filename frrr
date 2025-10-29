@@ -1,103 +1,36 @@
--- MM2 Mobile Simple Trade - Phone Version
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+-- SUPER SIMPLE MM2 Trade for Phone
+local player = game.Players.LocalPlayer
 
--- Создаем простой интерфейс
-local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = player.PlayerGui
+-- Просто кнопка
+local gui = Instance.new("ScreenGui")
+gui.Parent = player.PlayerGui
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 150, 0, 100)
-frame.Position = UDim2.new(0, 10, 0, 10)
-frame.BackgroundColor3 = Color3.new(0, 0, 0)
-frame.BackgroundTransparency = 0.3
-frame.Parent = screenGui
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0, 100, 0, 50)
+btn.Position = UDim2.new(0, 10, 0, 10)
+btn.Text = "START TRADE"
+btn.BackgroundColor3 = Color3.new(0, 1, 0)
+btn.Parent = gui
 
-local tradeBtn = Instance.new("TextButton")
-tradeBtn.Size = UDim2.new(0.8, 0, 0, 30)
-tradeBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
-tradeBtn.Text = "ВКЛ Трейд"
-tradeBtn.BackgroundColor3 = Color3.new(1, 0, 0)
-tradeBtn.TextColor3 = Color3.new(1, 1, 1)
-tradeBtn.Parent = frame
-
-local addBtn = Instance.new("TextButton")
-addBtn.Size = UDim2.new(0.8, 0, 0, 30)
-addBtn.Position = UDim2.new(0.1, 0, 0.5, 0)
-addBtn.Text = "ВКЛ Добавить"
-addBtn.BackgroundColor3 = Color3.new(1, 0, 0)
-addBtn.TextColor3 = Color3.new(1, 1, 1)
-addBtn.Parent = frame
-
-local trading = false
-local adding = false
-
--- Функция для принятия трейда
-tradeBtn.MouseButton1Click:Connect(function()
-    trading = not trading
-    if trading then
-        tradeBtn.Text = "ВЫКЛ Трейд"
-        tradeBtn.BackgroundColor3 = Color3.new(0, 1, 0)
-    else
-        tradeBtn.Text = "ВКЛ Трейд" 
-        tradeBtn.BackgroundColor3 = Color3.new(1, 0, 0)
+btn.MouseButton1Click:Connect(function()
+    -- Когда нажимаешь кнопку - добавляет предметы и принимает трейд
+    local backpack = player.Backpack
+    if backpack then
+        for _, item in pairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                -- Пробуем добавить предмет
+                pcall(function()
+                    game.ReplicatedStorage:FindFirstChild("AddItemToTrade"):FireServer(item)
+                end)
+            end
+        end
     end
-end)
-
--- Функция для добавления предметов
-addBtn.MouseButton1Click:Connect(function()
-    adding = not adding
-    if adding then
-        addBtn.Text = "ВЫКЛ Добавить"
-        addBtn.BackgroundColor3 = Color3.new(0, 1, 0)
-    else
-        addBtn.Text = "ВКЛ Добавить"
-        addBtn.BackgroundColor3 = Color3.new(1, 0, 0)
-    end
-end)
-
--- Главный цикл
-while true do
+    
+    -- Пробуем принять трейд
     wait(1)
-    
-    if trading then
-        -- Просто ищем кнопку Accept и кликаем
-        for _, gui in pairs(player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, obj in pairs(gui:GetDescendants()) do
-                    if obj:IsA("TextButton") and (obj.Text:lower():find("accept") or obj.Text:lower():find("confirm")) then
-                        pcall(function()
-                            obj.BackgroundColor3 = Color3.new(0, 1, 0)
-                        end)
-                    end
-                end
-            end
-        end
-    end
-    
-    if adding then
-        -- Просто добавляем все предметы из инвентаря
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then
-            for _, item in pairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    -- Пробуем разные Remote события
-                    local events = {
-                        "AddItemToTrade",
-                        "TradeAddItem",
-                        "AddToTrade"
-                    }
-                    
-                    for _, eventName in pairs(events) do
-                        local event = game:GetService("ReplicatedStorage"):FindFirstChild(eventName)
-                        if event then
-                            pcall(function()
-                                event:FireServer(item)
-                            end)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
+    pcall(function()
+        game.ReplicatedStorage:FindFirstChild("AcceptTrade"):FireServer()
+    end)
+end)
+
+print("Просто нажми кнопку когда в трейде!")
